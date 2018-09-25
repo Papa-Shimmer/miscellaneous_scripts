@@ -2,10 +2,10 @@ import netCDF4
 import os
 from collections import Counter
 
-netcdf_path_local = os.path.abspath("C:\\Users\\u62231\\Desktop\\airbourne_rad_mag")
+netcdf_path_local = os.path.abspath(None)
 
-#netcdf_local_test_file_name = "\\GSSA_P1255MAG_Marree.nc"
-netcdf_local_test_file_name = "GSWA_P1233_Hickman_Crater_MAG.nc"
+
+netcdf_local_test_file_name = None
 
 print(netcdf_path_local)
 print(netcdf_local_test_file_name)
@@ -20,7 +20,7 @@ netcdf_input_dataset = netCDF4.Dataset(netcdf_input_path,
 # print(nc_input_dataset.variables['index_line'][:])
 
 
-nc_output_dataset_path = "C:\\Users\\u62231\\Desktop\\airbourne_rad_mag_edited\\EDITED_{}".format(netcdf_local_test_file_name)
+nc_output_dataset_path = None
 
 def get_list_of_line_indexes_for_points(nc_input_dataset):
 
