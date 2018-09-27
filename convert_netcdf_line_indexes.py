@@ -139,6 +139,7 @@ def main():
                 print(edited_dict)
                 edited_dict['long_name'] = 'coordinate_reference_system'
                 edited_dict['spatial_ref'] = crs_gda94_string
+                dst[name].setncatts(edited_dict)
 
             # re add the remaining variables not in the exclusion list.
             elif name not in vars_to_exclude:
