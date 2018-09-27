@@ -1,6 +1,6 @@
 import netCDF4
 import os
-from collections import Counter
+from collections import Counter, OrderedDict
 import sys
 import numpy as np
 
@@ -102,14 +102,15 @@ def main():
 
 
 
-    vars_to_change_attribute = ['bearing', 'line', 'flag_linetype', 'longitude_first', 'flight', 'latitude_last',
+    vars_to_change_standard_name = ['bearing', 'line', 'flag_linetype', 'longitude_first', 'flight', 'latitude_last',
                                 'point', 'mag_awags',
                                 'bounding_polygon', 'height', 'longitude_last', 'mag_mlev',
                                 'survey', 'fiducial', 'date', 'line', 'mag_lev',
                                 'latitude_first']
-
+    remove_unit_list = ['line', 'date', 'flight', 'flag_levelling', 'flag_linetype', 'fiducial']
     vars_to_exclude = ['point', 'index_line', 'index_count', 'survey']
-    #vars_to_exclude = []
+
+
     with netcdf_input_dataset as src, netCDF4.Dataset(nc_output_dataset_path, "w") as dst:
         # copy global attributes all at once via dictionary
         dst.setncatts(src.__dict__)
@@ -121,6 +122,7 @@ def main():
         for name, variable in src.variables.items():
             print(name)
             print(variable)
+            #take care of the special cases 'point', 'crs',
             if name == 'point':  # make point_id?
                 var_attributes_dict = {"long_name": "zero-based index of value in line",
                                        "lookup": "line"}
@@ -131,30 +133,39 @@ def main():
                 point_line_index_var[:] = point_line_index_list
                 point_line_index_var.setncatts(var_attributes_dict)
 
-            if name not in vars_to_exclude:
-                if name =="crs":
-                    dst.createVariable(name, 'b')  # type byte and no dimension (scalar)
-                    edited_dict = src['crs'].__dict__
-                    print(edited_dict)
-                    edited_dict['long_name'] = 'coordinate_reference_system'
-                    edited_dict['spatial_ref'] = crs_gda94_string
-                    dst[name].setncatts(edited_dict)
-                else:
-                #edited_dict = {}
-                    x = dst.createVariable(name, variable.datatype, variable.dimensions)
-                    # copy variable attributes all at once via dictionary
-                    if name in vars_to_change_attribute:
-                        print("source_dict")
-                        print(src[name].__dict__)
-                        edited_dict = src[name].__dict__
-                        edited_dict['long_name'] = edited_dict.pop('standard_name')
-                        dst[name].setncatts(edited_dict)
-                        dst[name][:] = src[name][:]
-                    else:
-                        dst[name].setncatts(src[name].__dict__)
-                        dst[name][:] = src[name][:]
+            elif name == "crs":
+                dst.createVariable(name, 'b')  # type byte and no dimension (scalar)
+                edited_dict = src['crs'].__dict__
+                print(edited_dict)
+                edited_dict['long_name'] = 'coordinate_reference_system'
+                edited_dict['spatial_ref'] = crs_gda94_string
 
-        print(dst.variables['line'][:])
+            # re add the remaining variables not in the exclusion list.
+            elif name not in vars_to_exclude:
+                dst.createVariable(name, variable.datatype, variable.dimensions)
+                # Change standard names to long names
+                if name in vars_to_change_standard_name:
+                    print("source_dict")
+                    print(src[name].__dict__)
+                    edited_dict = src[name].__dict__
+                    edited_dict['long_name'] = edited_dict.pop('standard_name')
+                    # remove units for variables in remove_unit_list
+                    if name in remove_unit_list:
+                        edited_dict.pop('units')
+                else:
+                    edited_dict = src[name].__dict__
+                    if name in remove_unit_list:
+                        edited_dict.pop('units')
+                dst[name].setncatts(edited_dict)
+                dst[name][:] = src[name][:]
+
+        # survey was excluded previously. Now recreate it as a scalar
+        survey_scalar_dict = {'long_name': 'survey_number',
+                                      'original_database_name': 'survey',
+                                      'survey_id': src.survey_id}
+        print(survey_scalar_dict)
+        dst.createVariable('survey', 'b')
+        dst['survey'].setncatts(survey_scalar_dict)
 
 if __name__ == "__main__":
 
