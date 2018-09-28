@@ -4,6 +4,7 @@ from collections import Counter
 import sys
 import numpy as np
 import logging
+import numpy.testing
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -60,7 +61,9 @@ def np_get_list_of_line_indexes_for_points(nc_input_dataset):
     new_line_values = np.arange(len(nc_input_dataset.dimensions['line']))
     logging.debug(new_line_values)
 
-    line_index_array = np.zeros(len(nc_input_dataset.dimensions['point']), dtype='int8')
+    line_index_array = np.zeros(len(nc_input_dataset.dimensions['point']),
+                                dtype='int8' if nc_input_dataset.dimensions['line'].size < 128 else 'int32')
+    print('line_index_array.dtype: {}'.format(line_index_array.dtype))
 
     # loop through an array [0, 1, 2....n) length of line dimension.
     for i in np.arange(len(nc_input_dataset.dimensions['line'])):
@@ -82,6 +85,39 @@ def test_list(point_line_index_list, nc_input_dataset):
         index = index + 1
     logging.debug("PASSED")
 
+def test_new_line_index(nc_input_dataset, nc_output_dataset):
+
+    logging.debug('Assert numpy array generated from new output netcdf variable "line_index" is equal to '
+                  'input netcdf removed variable "index_count".')
+    unique, counts = np.unique(nc_output_dataset.variables['line_index'][:], return_counts=True)
+    index_count = dict(zip(unique, counts))
+    print('counts')
+    print(counts)
+    print("index COUNT")
+    print(nc_input_dataset.variables['index_count'][:])
+    #assert (counts == nc_input_dataset.variables['index_count'][:]).all()
+    assert np.alltrue(counts == nc_input_dataset.variables['index_count'][:])
+    logging.debug("PASSED")
+
+    logging.debug('Assert numpy array generated from new output netcdf variable "line_index" is equal to '
+                  'input netcdf removed variable "index_line".')
+    line_index = np.arange(len(index_count))
+    lines_last_index = np.arange(len(index_count))
+    count_sum = 0
+    for i in np.arange(len(index_count)):
+        line_index[i] = count_sum
+        count_sum = count_sum + counts[i]
+        lines_last_index[i] = count_sum - 1
+    assert np.alltrue(line_index == nc_input_dataset.variables['index_line'][:])
+    logging.debug("PASSED")
+
+
+    longitude_first = nc_output_dataset.variables['longitude'][line_index]
+    assert np.alltrue(longitude_first == nc_input_dataset.variables['longitude_first'][:])
+    #
+    # print('Equivalent of longitude_last')
+    # longitude_last = netcdf_input_dataset.variables['longitude'][lines_last_index]
+    # print(longitude_last)
 
 def main():
 
@@ -117,8 +153,10 @@ def main():
                                        "lookup": "line"}
                 point_line_index_list = np_get_list_of_line_indexes_for_points(netcdf_input_dataset)
                 logging.debug(point_line_index_list)
-                test_list(point_line_index_list, netcdf_input_dataset)
-                point_line_index_var = dst.createVariable(varname="line_index", datatype="i1", dimensions="point")
+                #test_list(point_line_index_list, netcdf_input_dataset)
+                point_line_index_var = dst.createVariable(varname="line_index",
+                                                          datatype=point_line_index_list.dtype,
+                                                          dimensions="point")
                 point_line_index_var[:] = point_line_index_list
                 point_line_index_var.setncatts(var_attributes_dict)
 
@@ -166,6 +204,7 @@ def main():
         dst.createVariable('survey', 'b')
         dst['survey'].setncatts(survey_scalar_dict)
 
+        #test_new_line_index(src, dst)
 
 if __name__ == "__main__":
     main()
