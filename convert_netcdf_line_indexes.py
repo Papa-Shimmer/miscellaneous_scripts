@@ -14,10 +14,11 @@ TOWGS84[0,0,0,0,0,0,0], AUTHORITY["EPSG","6283"]], PRIMEM["Greenwich",0, AUTHORI
 UNIT["degree",0.0174532925199433, AUTHORITY["EPSG","9122"]], AUTHORITY["EPSG","4283"]]'''
 
 vars_to_change_standard_name_to_long_name = ['bearing', 'line', 'flag_linetype', 'longitude_first', 'flight',
-                                             'latitude_last',
-                                             'point', 'mag_awags', 'bounding_polygon', 'height', 'longitude_last',
-                                             'mag_mlev',
-                                             'survey', 'fiducial', 'date', 'line', 'mag_lev', 'latitude_first']
+                                             'latitude_last','point', 'mag_awags', 'bounding_polygon', 'height',
+                                             'longitude_last', 'mag_mlev', 'survey', 'fiducial', 'date', 'line',
+                                             'mag_lev', 'latitude_first', 'rad_air_dose_rate',
+                                             'rad_air_dose_rate_unsmoothed']
+var_to_have_long_name = ['longitude', 'latitdue']
 
 remove_unit_list = ['line', 'date', 'flight', 'flag_levelling', 'flag_linetype', 'fiducial']
 
@@ -174,7 +175,7 @@ def main():
                 logging.info("Adding variable: {}...".format(name))
                 dst.createVariable(name, variable.datatype, variable.dimensions)
                 # Change standard names to long names
-                if name in vars_to_change_standard_name_to_long_name:
+                if name not in var_to_have_long_name:
                     logging.debug("Changing attribute 'standard_name' to 'long_name' for variable {}".format(name))
                     edited_dict = src[name].__dict__
                     edited_dict['long_name'] = edited_dict.pop('standard_name')
@@ -204,7 +205,7 @@ def main():
         dst.createVariable('survey', 'b')
         dst['survey'].setncatts(survey_scalar_dict)
 
-        #test_new_line_index(src, dst)
+        test_new_line_index(src, dst)
 
 if __name__ == "__main__":
     main()
