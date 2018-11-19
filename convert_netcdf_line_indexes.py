@@ -153,7 +153,6 @@ def main():
                 while i < len(array.data):
                     #print(array.mask[i])
                     if array.mask[i] == True:
-                        #print('haHA')
                         print(array.data[i])
                         mask_index.append(i)
                     i = i + 1

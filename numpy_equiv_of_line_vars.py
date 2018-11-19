@@ -3,8 +3,8 @@ import numpy as np
 import collections
 
 
-#path = "C:\\Users\\u62231\\Desktop\\airbourne_rad_mag_edited\\EDITED_P411MAG.nc"
-path = "C:\\Users\\u62231\\Desktop\\from_ross\\P1152RAD_v2.nc"
+#path = ""
+path = ""
 netcdf_input_dataset = netCDF4.Dataset(path,
                                        mode="r",
                                        clobber=True,
@@ -26,9 +26,6 @@ for i in np.arange(len(index_count)):
     count_sum = count_sum + counts[i]
     lines_last_index[i] = count_sum - 1
 print(index_line)
-
-#print("line index: {}".format(netcdf_input_dataset.variables['line_index'][:]))
-#index_line = np.where(netcdf_input_dataset.variables['line_index'][:][:-1] != netcdf_input_dataset.variables['line_index'][:][1:])[0]
 
 print('Equivalent of longitude_first')
 longitude_first = netcdf_input_dataset.variables['longitude'][index_line]
