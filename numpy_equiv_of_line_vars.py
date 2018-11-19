@@ -3,7 +3,8 @@ import numpy as np
 import collections
 
 
-path = "C:\\Users\\u62231\\Desktop\\airbourne_rad_mag_edited\\EDITED_P411MAG.nc"
+#path = "C:\\Users\\u62231\\Desktop\\airbourne_rad_mag_edited\\EDITED_P411MAG.nc"
+path = "C:\\Users\\u62231\\Desktop\\from_ross\\P1152RAD_v2.nc"
 netcdf_input_dataset = netCDF4.Dataset(path,
                                        mode="r",
                                        clobber=True,

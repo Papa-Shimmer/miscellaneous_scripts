@@ -8,6 +8,8 @@ import numpy.testing
 
 logging.basicConfig(level=logging.DEBUG)
 
+np.set_printoptions(threshold=np.nan)
+
 crs_gda94_string = '''GEOGCS["GDA94", DATUM["Geocentric_Datum_of_Australia_1994", 
 SPHEROID["GRS 1980",6378137,298.257222101, AUTHORITY["EPSG","7019"]], 
 TOWGS84[0,0,0,0,0,0,0], AUTHORITY["EPSG","6283"]], PRIMEM["Greenwich",0, AUTHORITY["EPSG","8901"]], 
@@ -18,7 +20,7 @@ vars_to_change_standard_name_to_long_name = ['bearing', 'line', 'flag_linetype',
                                              'longitude_last', 'mag_mlev', 'survey', 'fiducial', 'date', 'line',
                                              'mag_lev', 'latitude_first', 'rad_air_dose_rate',
                                              'rad_air_dose_rate_unsmoothed']
-var_to_have_long_name = ['longitude', 'latitdue']
+var_to_have_long_name = ['longitude', 'latitude']
 
 remove_unit_list = ['line', 'date', 'flight', 'flag_levelling', 'flag_linetype', 'fiducial']
 
@@ -119,9 +121,9 @@ def main():
     nc_output_dataset_path = sys.argv[2]
 
     netcdf_input_dataset = netCDF4.Dataset(netcdf_input_path,
-                                           mode="r",
+                                           mode="r+",
                                            clobber=True,
-                                           format='NETCDF4')
+                                           )
 
     with netcdf_input_dataset as src, netCDF4.Dataset(nc_output_dataset_path, "w") as dst:
 
@@ -132,15 +134,41 @@ def main():
 
         # copy dimensions
         logging.info('copying dimensions from input netcdf to output netcdf...')
-        for name, dimension in src.dimensions.items():
+        for name, dimension in netcdf_input_dataset.dimensions.items():
             logging.info("Dimension: {}".format(name))
             dst.createDimension(
                 name, (len(dimension) if not dimension.isunlimited() else None))
 
         # copy all file data except for the excluded
         for name, variable in src.variables.items():
+            array = netcdf_input_dataset.variables[name][:]
+            if type(array) == np.ma.core.MaskedArray:
+                print('yes')
 
-            #take care of the special cases 'point', 'crs'. This is pretty messy but they require once off unique fixes...
+                print(np.array_equal(array.mask, array.data))
+                # print(array.data)
+                #print(array.mask)
+                i = 0
+                mask_index = []
+                while i < len(array.data):
+                    #print(array.mask[i])
+                    if array.mask[i] == True:
+                        #print('haHA')
+                        print(array.data[i])
+                        mask_index.append(i)
+                    i = i + 1
+                print(mask_index)
+                num_masked = len(array.mask)
+                print("variable {} has {} masked values".format(name,
+                                                                num_masked))
+
+                array.data[mask_index[1]] = 3
+
+                num_masked = len(array.mask)
+                print("variable {} has {} masked values".format(name,
+                                                            num_masked))
+
+            # take care of the special cases 'point', 'crs'. This is pretty messy but they require once off unique fixes...
             if name == 'point':  # make point_id?
                 logging.info('Creating new line_index variable...')
                 var_attributes_dict = {"long_name": "zero-based index of value in line",
@@ -193,7 +221,7 @@ def main():
         logging.info("Recreating variable survey as a scalar of type byte.")
         survey_scalar_dict = {'long_name': 'survey_number',
                               'original_database_name': 'survey',
-                              'survey_id': src.survey_id}
+                              'survey_number': src.survey_id}
         logging.debug("New 'survey' attributes: {}".format(survey_scalar_dict))
         dst.createVariable('survey', 'b')
         dst['survey'].setncatts(survey_scalar_dict)
