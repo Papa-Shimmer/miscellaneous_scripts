@@ -6,18 +6,26 @@ Created on 29 Sep. 2018
 import sys
 import netCDF4
 import numpy as np
-from geophys_utils import NetCDFLineUtils
+from geophys_utils import NetCDFLineUtils, _transect_utils
 from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.interpolate import interp1d
 import logging
 import csv
 import os
 import re
+import matplotlib.pyplot as plt
 
 logging.basicConfig(level=logging.INFO)
 
 np.set_printoptions(threshold=30000, suppress=True,
                     formatter={'float_kind': '{:0.15f}'.format})
 
+input_netcdf_folder_path = sys.argv[1]
+output_netcdf_folder_path = sys.argv[2]
+csv_file_name = sys.argv[3]
+csv_file = open(csv_file_name, 'w')
+writer = csv.writer(csv_file, delimiter=',')
+writer.writerow(["LINE", "LINE_ARRAY_INDEX", "VALUE_TO_CHANGE", "CHANGED_VALUE"])
 
 # snipped from https://stackoverflow.com/questions/6518811/interpolate-nan-values-in-a-numpy-array
 def nan_helper(y):
@@ -39,16 +47,34 @@ def nan_helper(y):
 
 def get_lat_and_long_of_line(line_utils, line_number):
     line_number, line_dict = next(line_utils.get_lines(line_numbers=line_number, variables=["latitude", "longitude"], get_contiguous_lines=True))
+    #print("line_DICT")
+    #print(line_dict)
+    #return line_dict['coordinates']
     return line_dict['latitude'], line_dict['longitude']
 
 
-def fill_in_masked_values_with_interpolated_values(narray):
-    is_nan_bool_array, x = nan_helper(narray)
-    interpolate_indexes = (is_nan_bool_array.nonzero()[0])
-    narray[is_nan_bool_array] = np.interp(x(is_nan_bool_array), x(~is_nan_bool_array), narray[~is_nan_bool_array])
-    return narray, interpolate_indexes
+def get_interpolation_function(array_with_nans):
+    # get interpolation function
+    array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
+    index_no_nans = np.arange(0, len(array_without_nans), 1)
+    order = 1
+    interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
+    return interpolation_func
 
-def get_array_to_extrapolate_left(array_with_nans):
+
+def get_interpolation_function_distance(array_with_nans, coords):
+    utms_coords = utm_coords()
+    _transect_utils.coords2distance()
+    # get interpolation function
+    array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
+    index_no_nans = np.arange(0, len(array_without_nans), 1)
+    order = 1
+
+    interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
+
+    return interpolation_func
+
+def extrapolate_left(array_with_nans, line, interpolation_func):
     logging.debug("Extrapolating left")
     # find the number of nans until a real value is hit. This will determine how many values need to be extrapolated.
     nan_count = 0
@@ -62,11 +88,6 @@ def get_array_to_extrapolate_left(array_with_nans):
 
     index_of_extrap_values = np.arange(0, nan_count, 1)
 
-    return nan_count, array_to_extrapoltate, index_of_extrap_values
-
-
-def extrapolate_left(array_with_nans, line, interpolation_func):
-    nan_count, array_to_extrapoltate, index_of_extrap_values = get_array_to_extrapolate_left(array_with_nans)
 
     # Extrapolate with linear interpolation function.
     y = interpolation_func(array_to_extrapoltate)
@@ -74,19 +95,10 @@ def extrapolate_left(array_with_nans, line, interpolation_func):
     # attach extrapolated array onto existing array
     values_to_change = array_with_nans[index_of_extrap_values]
     array_with_nans[index_of_extrap_values] = y
-    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, y)
+    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, y,  "extrapolate_left")
 
     return array_with_nans, index_of_extrap_values
 
-
-def get_interpolation_function(array_with_nans):
-    # get interpolation function
-    array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
-    index_no_nans = np.arange(0, len(array_without_nans), 1)
-    order = 1
-    interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
-
-    return interpolation_func
 
 def extrapolate_right(array_w_nans, line, interpolation_func):
     logging.debug("Extrapolating right")
@@ -103,10 +115,14 @@ def extrapolate_right(array_w_nans, line, interpolation_func):
         array_index = array_index - 1
 
     array_to_extrapoltate = np.arange(length_of_array_with_nans - nan_count, length_of_array_with_nans, 1)
-    print('array_to_extrapoltate_right')
 
     index_of_extrap_values = np.arange(0, nan_count, 1)
     values_to_change = array_w_nans[array_to_extrapoltate]
+
+    # get extrapolation function
+
+
+
     # Extrapolate with linear interpolation function.
     y = interpolation_func(array_to_extrapoltate)
     array_w_nans[array_to_extrapoltate] = y
@@ -115,38 +131,137 @@ def extrapolate_right(array_w_nans, line, interpolation_func):
     #  np.append(y, array_with_nans)
     # attach extrapolated array onto existing array
 
-
     array_w_nans[index_of_extrap_values] = y[index_of_extrap_values]
-    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, y)
+    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, y, "extrapolate_right")
 
     return array_w_nans, array_to_extrapoltate
 
 
+def fill_in_masked_values_with_interpolated_values(narray, interp_func, line):
+    is_nan_bool_array, x = nan_helper(narray)
+
+    ndarray2 = narray.copy()
+    interpolate_indexes = (is_nan_bool_array.nonzero()[0])
+
+    if interpolate_indexes is not None: # if are points to interpolate then interpolate them
+        narray[is_nan_bool_array] = interp_func(x(is_nan_bool_array))
+        log_changes_in_csv(len(narray[is_nan_bool_array]), line, interpolate_indexes, ndarray2[interpolate_indexes], narray[interpolate_indexes], "interpolate")
+        #interpolate_indexes2 = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        return narray, interpolate_indexes
+    return narray, []
+
+def interpolate():
+    pass
+
+
+def group_consecutives(vals, step=1):
+    """Return list of consecutive lists of numbers from vals (number list)."""
+    #print(vals)
+    run = []
+    result = [run]
+    expect = None
+    for v in vals:
+        if (v == expect) or (expect is None):
+            run.append(v)
+        else:
+            run = [v]
+            result.append(run)
+        expect = v + step
+    print(result)
+    return result
+
+
+
+def fill_in_the_blanks(narray, num_points_each_way_to_use_for_interp_func):
+    print("HERE")
+
+    is_nan_bool_array, x = nan_helper(narray)
+    ndarray2 = narray.copy()
+    interpolate_indexes = (is_nan_bool_array.nonzero()[0])
+    if len(interpolate_indexes) > 0:  # if are points to interpolate then interpolate them
+
+
+        groups_of_values_to_interp = (group_consecutives(interpolate_indexes))
+        print("Group consecutives")
+        print(groups_of_values_to_interp)
+
+        for group_to_interp in groups_of_values_to_interp:
+            # interpolate the group_to_interp
+            min_index = np.min(group_to_interp)
+            max_index = np.max(group_to_interp)
+
+
+
+
+            i = 1
+            indxes_ = np.array([], dtype= int)
+            while i <= num_points_each_way_to_use_for_interp_func:
+                indxes_ = np.append(indxes_, min_index - i)
+                indxes_ = np.append(indxes_, max_index + i)
+                i = i + 1
+            # i = 0
+            # while i > num_points_each_way_to_use_for_interp_func:
+            #     indxes_[i] = min_index + i
+            #     i = i + 1
+            print('indxes_')
+            print(np.sort(indxes_))
+            sorted_index = np.sort(indxes_)
+
+            x = sorted_index
+            y = narray[sorted_index]
+            print("X: {}".format(x))
+            print("Y: {}".format(y))
+
+            interpolation_func = interp1d(x, y)
+
+            xnew = group_to_interp
+            ynew = interpolation_func(xnew)
+
+            print("xnew: {}".format(xnew))
+            print("ynew: {}".format(ynew))
+
+            # plt.plot(x, y, 'o', xnew, ynew, '-')
+            # plt.show()
+
+            # put the interp points in
+            print("old")
+            print(narray[xnew])
+            narray[xnew] = ynew
+            print("new")
+            print(narray[xnew])
+
+    else:
+        return narray, []
+
+    return narray, interpolate_indexes
+# def fill_in_the_blanks2(narray):
+
+
 def get_array_for_prediction_type_variable(var_array_including_nan, interpolated_index, extrapolate_left_indexes, extrapolate_right_indexes):
+
     a = np.zeros(len(var_array_including_nan), dtype=int)
     a[interpolated_index] = 1
-    logging.debug('interpolated_index')
-    logging.debug(interpolated_index)
-    logging.debug('extrapolate_left_indexes')
-    logging.debug(extrapolate_left_indexes)
     if extrapolate_left_indexes is not None:
         a[extrapolate_left_indexes] = 2
     if extrapolate_right_indexes is not None:
         a[extrapolate_right_indexes] = 2
     return a
 
-def log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, changed_values):
 
+def log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, changed_values, extrap_direction):
+    """Record the points that changed to a csv."""
     print('nan_count: {}'.format(nan_count))
     print('line: {}'.format(line))
     print('index_of_extrap_values: {}'.format(index_of_extrap_values))
     print('values_to_change: {}'.format(values_to_change))
     print('changed_values: {}'.format(changed_values))
+    print('extrap_direction: {}'.format(extrap_direction))
 
     index = 0
     while index < nan_count:
-        writer.writerow([line, index_of_extrap_values[index], values_to_change[index], changed_values[index]])
+        writer.writerow([line, index_of_extrap_values[index], values_to_change[index], changed_values[index], extrap_direction])
         index = index + 1
+
 
 def check_lat_and_long_are_masked_consistently(lat_w_nans, long_w_nans):
     index = 0
@@ -176,19 +291,18 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
 
     var_array_including_nan = np.ma.filled(variable_narray.astype(float), np.nan)
 
-    # var_array_including_nan[10:12] = np.nan
-    # var_array_including_nan[0] = np.nan
-    # var_array_including_nan[-1] = np.nan
+    var_array_including_nan[10:12] = np.nan
+    var_array_including_nan[15:17] = np.nan
+    var_array_including_nan[0] = np.nan
+    var_array_including_nan[-1] = np.nan
     # logging.debug('var_array_including_nan')
     # logging.debug(var_array_including_nan)
 
-    # print("var_array_including_nan")
-    # print(var_array_including_nan)
-    # get the number of values to extrapolate at beginning.
     extrapolate_left_indexes = None
     extrapolate_right_indexes = None
 
     interp_func = get_interpolation_function(var_array_including_nan)
+    #interp_func = get_interpolation_function_distance(var_array_including_nan, coords)
 
     if np.isnan(var_array_including_nan[0]):
         # then the first value is nan and extrapolation is required
@@ -198,8 +312,8 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
         logging.debug(var_array_including_nan[-1])
         var_array_including_nan, extrapolate_right_indexes = extrapolate_right(var_array_including_nan, line, interp_func)
 
-
-    var_array_including_nan, interpolated_index = fill_in_masked_values_with_interpolated_values(var_array_including_nan)
+    var_array_including_nan, interpolated_index =  fill_in_the_blanks(var_array_including_nan, 1)
+   # var_array_including_nan, interpolated_index = fill_in_masked_values_with_interpolated_values(var_array_including_nan, interp_func, line)
 
     lookup_index_array = get_array_for_prediction_type_variable(var_array_including_nan,
                                            interpolated_index,
@@ -225,6 +339,7 @@ def get_interpolated_values_and_index(nc_dataset):
         logging.debug("LINE: {}".format(line))
 
         lat, long = get_lat_and_long_of_line(netcdf_line_utils, line)
+        #coords = lat, long = get_lat_and_long_of_line(netcdf_line_utils, line)
 
         lat_w_nans = np.ma.filled(lat.astype(float), np.nan)
         long_w_nans = np.ma.filled(long.astype(float), np.nan)
@@ -239,6 +354,9 @@ def get_interpolated_values_and_index(nc_dataset):
             pass
         else:
             logging.error(("Line {} has no coordinates. All values are Nan".format(line)))
+            #######
+            # remove line from dataset?
+            #######
             return False
 
 
@@ -256,23 +374,15 @@ def test_indexes_match_nan_locations(lat_w_nans, longs_w_nans):
     pass
 
 def main():
-
-    input_netcdf_folder_path = sys.argv[1]
-    output_netcdf_folder_path = sys.argv[2]
-    csv_file_name = sys.argv[3]
     # netcdf_input_path = sys.argv[1]
     # nc_output_dataset_path = sys.argv[2]
-
-    csv_file = open(csv_file_name, 'w')
-    writer = csv.writer(csv_file, delimiter=',')
-    writer.writerow(["LINE", "LINE_ARRAY_INDEX", "VALUE_TO_CHANGE", "CHANGED_VALUE"])
-
     for root, dirs, files in os.walk(input_netcdf_folder_path):
-        print(root)
+      #  print('root')
+       # print(root)
         for filename in files:
             if re.search(".nc", filename):
-                netcdf_input_dataset_path = "{}\\{}".format(root, filename)
-                print(netcdf_input_dataset_path)
+                netcdf_input_dataset_path = "{}\{}".format(root, filename)
+                #print(netcdf_input_dataset_path)
 
                 netcdf_input_dataset = netCDF4.Dataset(netcdf_input_dataset_path,
                                                mode="r+",
@@ -286,7 +396,9 @@ def main():
 
                 logging.debug('dict_of_arrays')
                 logging.debug(dict_of_arrays)
-                nc_output_dataset_path = "{}\\{}".format(output_netcdf_folder_path, filename)
+                nc_output_dataset_path = "{}\{}".format(output_netcdf_folder_path, filename)
+                print('nc_output_dataset_path')
+               # print(nc_output_dataset_path)
 
                 with netcdf_input_dataset as src, netCDF4.Dataset(nc_output_dataset_path, "w") as dst:
 
@@ -300,7 +412,6 @@ def main():
                     for name, dimension in netcdf_input_dataset.dimensions.items():
                         logging.debug("Dimension: {}".format(name))
                         dst.createDimension(name, (len(dimension) if not dimension.isunlimited() else None))
-
 
                     for name, variable in src.variables.items():
                         # edit lat and long variables
@@ -320,6 +431,8 @@ def main():
                         edited_dict = src[name].__dict__
                         dst[name].setncatts(edited_dict)
                         dst[name][:] = src[name][:]
+                        print("HERE")
+                        print(src[name][:])
 
                     # create variable for the lookup_index_arrays
                     dst.createVariable('coord_predicted', dict_of_arrays['lookup_index_array'].dtype, ('point',))
