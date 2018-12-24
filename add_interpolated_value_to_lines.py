@@ -50,9 +50,6 @@ def nan_helper(y):
 
 def get_lat_and_long_of_line(line_utils, line_number):
     line_number, line_dict = next(line_utils.get_lines(line_numbers=line_number, variables=["latitude", "longitude"], get_contiguous_lines=True))
-    #print("line_DICT")
-    #print(line_dict)
-    #return line_dict['coordinates']
     return line_dict['latitude'], line_dict['longitude']
 
 
@@ -155,12 +152,10 @@ def extrapolate_left(array_with_nans, line, interpolation_func, num_points_for_e
 
 
 def extrapolate_right(array_w_nans, line, num_existing_points_use_for_extrap=3):
-    logging.debug("Extrapolating right")
+    print("Extrapolating right")
     # find the number of nans until a real value is hit. This will determine how many values need to be extrapolated.
     nan_count = 0
-    length_of_array_with_nans = len(array_w_nans)
     array_index = len(array_w_nans) - 1
-
     while array_index >= 0:
         if np.isnan(array_w_nans[array_index]):
             nan_count = nan_count + 1
@@ -168,77 +163,60 @@ def extrapolate_right(array_w_nans, line, num_existing_points_use_for_extrap=3):
             break
         array_index = array_index - 1
 
-    last_most_index = length_of_array_with_nans - 1
-    array_to_extrapoltate = np.arange(length_of_array_with_nans - nan_count, length_of_array_with_nans, 1)
+    last_most_index = len(array_w_nans) - 1
+    print('last_most_index')
+    print(last_most_index)
 
-    index_of_extrap_values = np.arange(length_of_array_with_nans - nan_count - 1, length_of_array_with_nans - 1, 1)
-    values_to_change = array_w_nans[array_to_extrapoltate]
+    index_of_extrap_values = np.arange(len(array_w_nans) - nan_count, len(array_w_nans), 1)
+    #index_array_to_extrapoltate = np.arange(length_of_array_with_nans - nan_count, length_of_array_with_nans, 1)
+    values_to_change = array_w_nans[index_of_extrap_values]
     print("index_of_extrap_values")
+    print(index_of_extrap_values)
+    print('index_array_to_extrapoltate')
     print(index_of_extrap_values)
 
     # get extrapolation function
     print(len(array_w_nans))
-    print(array_w_nans[len(array_w_nans) -1])
+    print(array_w_nans[index_of_extrap_values])
 
+    start_index = last_most_index - nan_count - num_existing_points_use_for_extrap
     # how many points back to use for extrap method?
-    start_index = len(array_w_nans) - 1 - num_existing_points_use_for_extrap - 1
-    array_to_use_for_interp = np.arange(start_index, len(array_w_nans) - 1, 1)
-    print('array_to_use_for_interp')
-    print(array_to_use_for_interp)
-
-    #last_measured_value = array_w_nans[index_of_extrap_values[0] -1]
-    t = np.arange(4,8,1)
-    #f = InterpolatedUnivariateSpline(array_to_use_for_interp, array_w_nans[array_to_use_for_interp], k=1)
-    f = interp1d(array_to_use_for_interp, array_w_nans[array_to_use_for_interp], fill_value='extrapolate')
 
 
-    print("HERERER")
-    print(f([7]))
-    print(f([9]))
-    print(f([-1]))
-    print(f([2098]))
-    print(f([2100]))
-
-    array_w_nans[array_to_extrapoltate] = f(index_of_extrap_values)
+    array_to_use_for_interp = np.arange(start_index, last_most_index - nan_count, 1)
 
 
 
 
-    #interpolation_func = interp1d(array_to_use_for_interp, array_w_nans[array_to_use_for_interp], fill_value="extrapolate")
+    interp_function = interp1d(array_to_use_for_interp, array_w_nans[array_to_use_for_interp], fill_value='extrapolate')
 
-    #  Extrapolate with linear interpolation function.
-    #y = interpolation_func(array_to_extrapoltate)
-    #array_w_nans[array_to_extrapoltate] = y
-    logging.debug('array_to_extrapoltate_right')
-    logging.debug(array_to_extrapoltate)
+    array_w_nans[index_of_extrap_values] = interp_function(index_of_extrap_values)
 
-    #  np.append(y, array_with_nans)
-    #  attach extrapolated array onto existing array
+
 
     #array_w_nans[index_of_extrap_values] = y[index_of_extrap_values]
-    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, array_w_nans[array_to_extrapoltate], "extrapolate_right")
+    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, array_w_nans[index_of_extrap_values], "extrapolate_right")
 
     assert_extrapolation_correct(array_w_nans, index_of_extrap_values, array_to_use_for_interp)
 
-    return array_w_nans, array_to_extrapoltate
-
+    return array_w_nans, index_of_extrap_values
 
 
 def assert_extrapolation_correct(complete_array, index_of_exptrapolate_values, array_to_use_for_interp):
-    print("HERE DOG")
+    print("Asserting interpolation is correct...")
    # print((index_of_extrap_values[0]) - 1)
 
    # last_measured_value_index = index_of_extrap_values[0] - 1
 
    # print(last_measured_value_index)
-    print("index array_to use for interp {}".format(array_to_use_for_interp))
-    print("array_to use for interp {}".format(complete_array[array_to_use_for_interp]))
+    print("Index array to use for interp {}".format(array_to_use_for_interp))
+    print("Array Values to use for interp {}".format(complete_array[array_to_use_for_interp]))
     test_array_indexes = np.insert(index_of_exptrapolate_values, 0, array_to_use_for_interp)
-    print("index_extrap values: {}".format(index_of_exptrapolate_values))
-    print("extrap values: {}".format(complete_array[index_of_exptrapolate_values]))
+    print("index of values to extrapolate: {}".format(index_of_exptrapolate_values))
+    print("extrapolated values: {}".format(complete_array[index_of_exptrapolate_values]))
 
     test_array = complete_array[test_array_indexes]
-    print(test_array)
+    print("array values to use for interpolation function with extralopalated values added: {}".format(test_array))
 
     value_index = 0
     while value_index < len(test_array) - 2:
@@ -283,71 +261,68 @@ def group_consecutives(vals, step=1):
     return result
 
 
-
 def fill_in_the_blanks(narray, num_points_each_way_to_use_for_interp_func):
     print("HERE")
-
+    print(narray)
     is_nan_bool_array, x = nan_helper(narray)
     ndarray2 = narray.copy()
     interpolate_indexes = (is_nan_bool_array.nonzero()[0])
     if len(interpolate_indexes) > 0:  # if are points to interpolate then interpolate them
 
-
+        #if np.isnan(interpolate_indexes[0]) or np.isnan(interpolate_indexes[-1]):
         groups_of_values_to_interp = (group_consecutives(interpolate_indexes))
         print("Group consecutives")
         print(groups_of_values_to_interp)
 
         for group_to_interp in groups_of_values_to_interp:
-            # interpolate the group_to_interp
-            min_index = np.min(group_to_interp)
-            max_index = np.max(group_to_interp)
+            if group_to_interp[0] == 0 or group_to_interp[-1] == len(narray) - 1:
+                print("Skipping extrapolation points")
+            else:
 
+                # interpolate the group_to_interp
+                min_index = np.min(group_to_interp)
+                max_index = np.max(group_to_interp)
+                i = 1
+                indxes_ = np.array([], dtype= int)
+                while i <= num_points_each_way_to_use_for_interp_func:
+                    indxes_ = np.append(indxes_, min_index - i)
+                    indxes_ = np.append(indxes_, max_index + i)
+                    i = i + 1
+                # i = 0
+                # while i > num_points_each_way_to_use_for_interp_func:
+                #     indxes_[i] = min_index + i
+                #     i = i + 1
+                print('indxes_')
+                print(np.sort(indxes_))
+                sorted_index = np.sort(indxes_)
 
+                x = sorted_index
+                y = narray[sorted_index]
+                print("X: {}".format(x))
+                print("Y: {}".format(y))
 
+                interpolation_func = interp1d(x, y)
 
-            i = 1
-            indxes_ = np.array([], dtype= int)
-            while i <= num_points_each_way_to_use_for_interp_func:
-                indxes_ = np.append(indxes_, min_index - i)
-                indxes_ = np.append(indxes_, max_index + i)
-                i = i + 1
-            # i = 0
-            # while i > num_points_each_way_to_use_for_interp_func:
-            #     indxes_[i] = min_index + i
-            #     i = i + 1
-            print('indxes_')
-            print(np.sort(indxes_))
-            sorted_index = np.sort(indxes_)
+                xnew = group_to_interp
+                ynew = interpolation_func(xnew)
 
-            x = sorted_index
-            y = narray[sorted_index]
-            print("X: {}".format(x))
-            print("Y: {}".format(y))
+                print("xnew: {}".format(xnew))
+                print("ynew: {}".format(ynew))
 
-            interpolation_func = interp1d(x, y)
+                # plt.plot(x, y, 'o', xnew, ynew, '-')
+                # plt.show()
 
-            xnew = group_to_interp
-            ynew = interpolation_func(xnew)
-
-            print("xnew: {}".format(xnew))
-            print("ynew: {}".format(ynew))
-
-            # plt.plot(x, y, 'o', xnew, ynew, '-')
-            # plt.show()
-
-            # put the interp points in
-            print("old")
-            print(narray[xnew])
-            narray[xnew] = ynew
-            print("new")
-            print(narray[xnew])
-
-    else:
-        return narray, []
+                # put the interp points in
+                print("old")
+                print(narray[xnew])
+                narray[xnew] = ynew
+                print("new")
+                print(narray[xnew])
+        else:
+            return narray, []
 
     return narray, interpolate_indexes
 # def fill_in_the_blanks2(narray):
-
 
 def get_array_for_prediction_type_variable(var_array_including_nan, interpolated_index, extrapolate_left_indexes, extrapolate_right_indexes):
 
@@ -405,8 +380,9 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
 
     var_array_including_nan[10:12] = np.nan
     var_array_including_nan[15:17] = np.nan
-    var_array_including_nan[0:4] = np.nan
+    #var_array_including_nan[0:4] = np.nan
     var_array_including_nan[-1] = np.nan
+    var_array_including_nan[-2] = np.nan
     # logging.debug('var_array_including_nan')
     # logging.debug(var_array_including_nan)
 
@@ -416,6 +392,8 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
     interp_func = get_interpolation_function(var_array_including_nan)
     #interp_func = get_interpolation_function_distance(var_array_including_nan, coords)
 
+    var_array_including_nan, interpolated_index = fill_in_the_blanks(var_array_including_nan, 1)
+
     if np.isnan(var_array_including_nan[0]):
         # then the first value is nan and extrapolation is required
         var_array_including_nan, extrapolate_left_indexes = extrapolate_left(var_array_including_nan, line, interp_func, 5)
@@ -424,7 +402,7 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
         logging.debug(var_array_including_nan[-1])
         var_array_including_nan, extrapolate_right_indexes = extrapolate_right(var_array_including_nan, line, 3)
 
-    var_array_including_nan, interpolated_index = fill_in_the_blanks(var_array_including_nan, 1)
+
    # var_array_including_nan, interpolated_index = fill_in_masked_values_with_interpolated_values(var_array_including_nan, interp_func, line)
 
     lookup_index_array = get_array_for_prediction_type_variable(var_array_including_nan,
@@ -543,8 +521,6 @@ def main():
                         edited_dict = src[name].__dict__
                         dst[name].setncatts(edited_dict)
                         dst[name][:] = src[name][:]
-                        print("HERE")
-                        print(src[name][:])
 
                     # create variable for the lookup_index_arrays
                     dst.createVariable('coord_predicted', dict_of_arrays['lookup_index_array'].dtype, ('point',))
