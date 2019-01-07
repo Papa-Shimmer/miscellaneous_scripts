@@ -6,17 +6,14 @@ Created on 29 Sep. 2018
 import sys
 import netCDF4
 import numpy as np
-from geophys_utils import NetCDFLineUtils, _transect_utils
-from scipy.interpolate import InterpolatedUnivariateSpline
-from scipy.interpolate import interp1d
+from geophys_utils import NetCDFLineUtils
 import logging
 import csv
 import os
 import re
 import matplotlib.pyplot as plt
-
 from scipy.interpolate import interp1d
-from scipy import arange, array, exp
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,46 +50,44 @@ def get_lat_and_long_of_line(line_utils, line_number):
     return line_dict['latitude'], line_dict['longitude']
 
 
-def get_interpolation_function(array_with_nans):
-    # get interpolation function
-    array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
-    index_no_nans = np.arange(0, len(array_without_nans), 1)
-    order = 1
-    interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
-    return interpolation_func
+# def get_interpolation_function(array_with_nans):
+#     # get interpolation function
+#     array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
+#     index_no_nans = np.arange(0, len(array_without_nans), 1)
+#     order = 1
+#     interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
+#     return interpolation_func
 
 
-def get_interpolation_function_distance(array_with_nans, coords):
-    utms_coords = utm_coords()
-    _transect_utils.coords2distance()
-    # get interpolation function
-    array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
-    index_no_nans = np.arange(0, len(array_without_nans), 1)
-    order = 1
-
-    interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
-
-    return interpolation_func
-
-
+# def get_interpolation_function_distance(array_with_nans, coords):
+#     utms_coords = utm_coords()
+#     _transect_utils.coords2distance()
+#     # get interpolation function
+#     array_without_nans = array_with_nans[~np.isnan(array_with_nans)]
+#     index_no_nans = np.arange(0, len(array_without_nans), 1)
+#     order = 1
+#
+#     interpolation_func = InterpolatedUnivariateSpline(x=index_no_nans, y=array_without_nans, k=order)
+#
+#     return interpolation_func
 
 
-def extrap1d(interpolator):
-    xs = interpolator.x
-    ys = interpolator.y
-
-    def pointwise(x):
-        if x < xs[0]:
-            return ys[0]+(x-xs[0])*(ys[1]-ys[0])/(xs[1]-xs[0])
-        elif x > xs[-1]:
-            return ys[-1]+(x-xs[-1])*(ys[-1]-ys[-2])/(xs[-1]-xs[-2])
-        else:
-            return interpolator(x)
-
-    def ufunclike(xs):
-        return array(map(pointwise, array(xs)))
-
-    return ufunclike
+# def extrap1d(interpolator):
+#     xs = interpolator.x
+#     ys = interpolator.y
+#
+#     def pointwise(x):
+#         if x < xs[0]:
+#             return ys[0]+(x-xs[0])*(ys[1]-ys[0])/(xs[1]-xs[0])
+#         elif x > xs[-1]:
+#             return ys[-1]+(x-xs[-1])*(ys[-1]-ys[-2])/(xs[-1]-xs[-2])
+#         else:
+#             return interpolator(x)
+#
+#     def ufunclike(xs):
+#         return array(map(pointwise, array(xs)))
+#
+#     return ufunclike
 
 
 def extrapolate_left(array_w_nans, line, num_points_for_extrap = 3):
@@ -155,7 +150,6 @@ def extrapolate_right(array_w_nans, line, num_existing_points_use_for_extrap=3):
                                fill_value='extrapolate')
     #  Extrapolate the points into the array
     array_w_nans[index_of_extrap_values] = interp_function(index_of_extrap_values)
-
 
     #  Test the extrapolation
     assert_extrapolation_correct(array_w_nans, index_of_extrap_values, index_array_to_use_for_interp,
@@ -232,12 +226,14 @@ def fill_in_the_blanks(narray, num_points_each_way_to_use_for_interp_func):
 
     is_nan_bool_array, x = nan_helper(narray)
     interpolate_indexes = (is_nan_bool_array.nonzero()[0])
+    print("interpolate_indexes: {}".format(interpolate_indexes))
     if len(interpolate_indexes) > 0:  # if are points to interpolate then interpolate them
 
         groups_of_values_to_interp = (group_consecutives(interpolate_indexes))
         logging.debug("Groups of Nans found: {}".format(groups_of_values_to_interp))
 
         for group_to_interp in groups_of_values_to_interp:
+            # check they are not nans at the beginning or end as these will require extrapolation instead.
             if group_to_interp[0] == 0 or group_to_interp[-1] == len(narray) - 1:
                 pass
             else:
@@ -270,9 +266,9 @@ def fill_in_the_blanks(narray, num_points_each_way_to_use_for_interp_func):
                 narray[xnew] = ynew
                 print("new")
                 print(narray[xnew])
-        else:
-            return narray, []
-
+        # else:
+        #     return narray, interpolate_indexes
+    print("interpolate_indexes2: {}".format(interpolate_indexes))
     return narray, interpolate_indexes
 
 
@@ -280,7 +276,10 @@ def get_array_for_prediction_type_variable(var_array_including_nan, interpolated
                                            extrapolate_right_indexes):
 
     a = np.zeros(len(var_array_including_nan), dtype=int)
+    print(a)
+    print(interpolated_index)
     a[interpolated_index] = 1
+    print("interpolated ones: {}".format(a[interpolated_index]))
     if extrapolate_left_indexes is not None:
         a[extrapolate_left_indexes] = 2
     if extrapolate_right_indexes is not None:
@@ -331,13 +330,11 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
 
     var_array_including_nan = np.ma.filled(variable_narray.astype(float), np.nan)
 
-    var_array_including_nan[10:12] = np.nan
-    var_array_including_nan[15:17] = np.nan
-    var_array_including_nan[0:4] = np.nan
+    #var_array_including_nan[10:12] = np.nan
+    #var_array_including_nan[250:350] = np.nan
+    #var_array_including_nan[0:150] = np.nan
     #var_array_including_nan[-1] = np.nan
     #var_array_including_nan[-2] = np.nan
-    # logging.debug('var_array_including_nan')
-    # logging.debug(var_array_including_nan)
 
     extrapolate_left_indexes = None
     extrapolate_right_indexes = None
@@ -374,6 +371,7 @@ def get_interpolated_values_and_index(nc_dataset):
         'lookup_index_array': []
         }
 
+    line_number = 0
     for line in line_list:
         logging.debug("LINE: {}".format(line))
 
@@ -393,11 +391,33 @@ def get_interpolated_values_and_index(nc_dataset):
             pass
         else:
             logging.error(("Line {} has no coordinates. All values are Nan".format(line)))
+
+            # print(line)
+            #
+            # print(nc_dataset.variables['latitude_first'][line_number])
+            # print(next(netcdf_line_utils.get_lines(line_numbers=line, variables=["line_index", "longitude"],
+            #                          get_contiguous_lines=True)))
+            # index_of_null_points_line_list = []
+            # index_point = 0
+            # while index_point < len(nc_dataset.dimensions['point']):
+            #     #print(index_point)
+            #     #print(nc_dataset.variables['line_index'][index_point])
+            #     if nc_dataset.variables['line_index'][index_point] == 97:
+            #         #print("HERE")
+            #         index_of_null_points_line_list.append(index_point)
+            #
+            #     index_point = index_point + 1
+            # print("index_of_null_points_line_list")
+            # print(index_of_null_points_line_list)
+
+            #nc_dataset.variables['line_index'][index_of_null_points_line_list] = None
+
+
             #######
             # remove line from dataset?
             #######
-            return False
-
+            continue
+        line_number = line_number + 1
 
         complete_array_long, lookup_index_array = replace_nan_in_variable_with_predicted_value(long, line)
         complete_array_lat, lookup_index_array = replace_nan_in_variable_with_predicted_value(lat, line)
@@ -449,40 +469,56 @@ def main():
                         dst.createDimension(name, (len(dimension) if not dimension.isunlimited() else None))
 
                     for name, variable in src.variables.items():
+                        print("NAME")
+                        print(name)
                         # edit lat and long variables
-                        if name is 'latitude':
-                            dst.createVariable(name, variable.datatype, variable.dimensions)
+                        if name == 'latitude':
+                            edited_dict = src[name].__dict__
+                            # fill value must be given here rather than copied over with the other attributes.
+                            dst.createVariable(name, variable.datatype, variable.dimensions, fill_value=edited_dict['_FillValue'])
+                            print("dict_of_arrays['lats_w_predictions']")
+                            print(dict_of_arrays['lats_w_predictions'])
                             dst[name][:] = dict_of_arrays['lats_w_predictions']
-                            edited_dict = src[name].__dict__
+                            del edited_dict['_FillValue']
                             dst[name].setncatts(edited_dict)
-                        if name is 'longitude':
-                            dst[name][:] = dict_of_arrays['longs_w_predictions']
+                        elif name == 'longitude':
                             edited_dict = src[name].__dict__
+                            dst.createVariable(name, variable.datatype, variable.dimensions, fill_value=edited_dict['_FillValue'])
+                            dst[name][:] = dict_of_arrays['longs_w_predictions']
+                            del edited_dict['_FillValue']
                             dst[name].setncatts(edited_dict)
 
-                        # copy over all the existing variables
-                        logging.debug("Adding variable: {}...".format(name))
-                        dst.createVariable(name, variable.datatype, variable.dimensions)
-                        edited_dict = src[name].__dict__
-                        dst[name].setncatts(edited_dict)
-                        dst[name][:] = src[name][:]
+                        else:
+                            # copy over all the existing variables
+                            logging.debug("Adding variable: {}...".format(name))
+                            dst.createVariable(name, variable.datatype, variable.dimensions)
+                            edited_dict = src[name].__dict__
+                            dst[name].setncatts(edited_dict)
+                            dst[name][:] = src[name][:]
 
                     # create variable for the lookup_index_arrays
                     dst.createVariable('coord_predicted', dict_of_arrays['lookup_index_array'].dtype, ('point',))
                     logging.info("dict_of_arrays['lookup_index_array']")
-                    logging.info(dict_of_arrays['lookup_index_array'])
+                    logging.info(len(dict_of_arrays['lookup_index_array']))
+                    logging.info(len(dst['coord_predicted'][:]))
                     dst['coord_predicted'][:] = dict_of_arrays['lookup_index_array']
                     # set attributes
                     edited_dict = {"long_name": "coordinate_predicted_flag"}
                     dst['coord_predicted'].setncatts(edited_dict)
 
                     # create variable for the lookup_table
-                    coord_predicted_lookup_table = np.array(["Coordinate is a GPS recording.", "Coordinate is a linear interpolation prediction value calculated from the existing gps recordings of points within the line.", "Coordinate is a linear extrapolation prediction value calculated from the existing gps recordings of points within the line."])
+                    coord_predicted_lookup_table = np.array(["Coordinate is a GPS recording.",
+                    "Coordinate is a linear interpolation prediction value calculated from the existing gps recordings "
+                    "of points within the line.",
+                    "Coordinate is a linear extrapolation prediction value calculated from the existing gps recordings "
+                    "of points within the line.",])
 
                     # make a new dimension
                     dst.createDimension('coord_predicted_lookup_table', (len(coord_predicted_lookup_table)))
                     dst.createVariable('coord_predicted_lookup_table', 'S3', ('coord_predicted_lookup_table',))
                     dst['coord_predicted_lookup_table'][:] = coord_predicted_lookup_table
 
+                    print(dst.variables['latitude'][:])
+                    print(dst.variables['longitude'][:])
 if __name__ == '__main__':
     main()
