@@ -118,8 +118,8 @@ def extrapolate_left(array_w_nans, line, num_points_for_extrap = 3):
     assert_extrapolation_correct(array_w_nans, index_of_extrap_values, index_array_to_use_for_interp,
                                  extrapolate_left=True)
     #  Log the changes in a csv
-    log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, array_w_nans[index_of_extrap_values],
-                       "extrapolate_left")
+    #log_changes_in_csv(nan_count, line, index_of_extrap_values, values_to_change, array_w_nans[index_of_extrap_values],
+     #                  "extrapolate_left")
 
     return array_w_nans, index_of_extrap_values
 
@@ -331,8 +331,8 @@ def replace_nan_in_variable_with_predicted_value(variable_narray, line):
     var_array_including_nan = np.ma.filled(variable_narray.astype(float), np.nan)
 
     #var_array_including_nan[10:12] = np.nan
-    #var_array_including_nan[250:350] = np.nan
-    #var_array_including_nan[0:150] = np.nan
+    #var_array_including_nan[350:500] = np.nan
+    #var_array_including_nan[0:50] = np.nan
     #var_array_including_nan[-1] = np.nan
     #var_array_including_nan[-2] = np.nan
 
@@ -375,8 +375,8 @@ def get_interpolated_values_and_index(nc_dataset):
     for line in line_list:
         logging.debug("LINE: {}".format(line))
 
+        # get the lat and long arrays with np.nans instead of masks
         lat, long = get_lat_and_long_of_line(netcdf_line_utils, line)
-        #coords = lat, long = get_lat_and_long_of_line(netcdf_line_utils, line)
 
         lat_w_nans = np.ma.filled(lat.astype(float), np.nan)
         long_w_nans = np.ma.filled(long.astype(float), np.nan)
@@ -388,9 +388,32 @@ def get_interpolated_values_and_index(nc_dataset):
             return False
 
         if check_for_lines_with_no_coords(lat_w_nans):
-            pass
+            complete_array_long, lookup_index_array = replace_nan_in_variable_with_predicted_value(long, line)
+            complete_array_lat, lookup_index_array = replace_nan_in_variable_with_predicted_value(lat, line)
+
+            dict_of_arrays['lats_w_predictions'] = np.append(dict_of_arrays['lats_w_predictions'], complete_array_lat)
+            dict_of_arrays['longs_w_predictions'] = np.append(dict_of_arrays['longs_w_predictions'],
+                                                              complete_array_long)
+            dict_of_arrays['lookup_index_array'] = np.append(dict_of_arrays['lookup_index_array'], lookup_index_array)
+
+
         else:
             logging.error(("Line {} has no coordinates. All values are Nan".format(line)))
+            #dict_of_arrays['lats_w_predictions'] = # make this equal mask? or a something else
+            print("length of line with all nulls")
+            print("LAT LONG")
+            print(lat, long)
+            print(type(np.append(dict_of_arrays['lats_w_predictions'], lat)))
+
+            # add masked values to the lat, long, and lookup_index_array variables for the null lines.
+            dict_of_arrays['lats_w_predictions'] = np.append(dict_of_arrays['lats_w_predictions'], lat)
+            dict_of_arrays['longs_w_predictions'] = np.append(dict_of_arrays['longs_w_predictions'], long)
+            dict_of_arrays['lookup_index_array'] = np.append(dict_of_arrays['lookup_index_array'], lat)
+
+            print('dict_of_arrays33')
+            print(dict_of_arrays['lats_w_predictions'])
+
+            #return len(lat_w_nans)
 
             # print(line)
             #
@@ -412,20 +435,20 @@ def get_interpolated_values_and_index(nc_dataset):
 
             #nc_dataset.variables['line_index'][index_of_null_points_line_list] = None
 
-
             #######
             # remove line from dataset?
             #######
-            continue
+
+
+
+
+
+
+
+
         line_number = line_number + 1
 
-        complete_array_long, lookup_index_array = replace_nan_in_variable_with_predicted_value(long, line)
-        complete_array_lat, lookup_index_array = replace_nan_in_variable_with_predicted_value(lat, line)
 
-        dict_of_arrays['lats_w_predictions'] = np.append(dict_of_arrays['lats_w_predictions'], complete_array_lat)
-
-        dict_of_arrays['longs_w_predictions'] = np.append(dict_of_arrays['longs_w_predictions'], complete_array_long)
-        dict_of_arrays['lookup_index_array'] = np.append(dict_of_arrays['lookup_index_array'], lookup_index_array)
 
     return dict_of_arrays
 
@@ -437,7 +460,7 @@ def main():
         for filename in files:
             if re.search(".nc", filename):
                 netcdf_input_dataset_path = "{}\{}".format(root, filename)
-                #print(netcdf_input_dataset_path)
+
 
                 netcdf_input_dataset = netCDF4.Dataset(netcdf_input_dataset_path,
                                                mode="r+",
@@ -452,7 +475,7 @@ def main():
                 logging.debug('dict_of_arrays')
                 logging.debug(dict_of_arrays)
                 nc_output_dataset_path = "{}\{}".format(output_netcdf_folder_path, filename)
-                print('nc_output_dataset_path')
+               # print('nc_output_dataset_path')
                # print(nc_output_dataset_path)
 
                 with netcdf_input_dataset as src, netCDF4.Dataset(nc_output_dataset_path, "w") as dst:
@@ -469,15 +492,20 @@ def main():
                         dst.createDimension(name, (len(dimension) if not dimension.isunlimited() else None))
 
                     for name, variable in src.variables.items():
-                        print("NAME")
-                        print(name)
+                       # print("NAME")
+                       # print(name)
                         # edit lat and long variables
                         if name == 'latitude':
                             edited_dict = src[name].__dict__
                             # fill value must be given here rather than copied over with the other attributes.
                             dst.createVariable(name, variable.datatype, variable.dimensions, fill_value=edited_dict['_FillValue'])
-                            print("dict_of_arrays['lats_w_predictions']")
-                            print(dict_of_arrays['lats_w_predictions'])
+                         #   print("dict_of_arrays['lats_w_predictions']")
+                          #  print(len(dict_of_arrays['lats_w_predictions']))
+                           # print(dict_of_arrays['lats_w_predictions'])
+                            #print("the other field")
+                            #print(len(dst[name][:]))
+                            #print(dst[name][:])
+
                             dst[name][:] = dict_of_arrays['lats_w_predictions']
                             del edited_dict['_FillValue']
                             dst[name].setncatts(edited_dict)
@@ -518,7 +546,7 @@ def main():
                     dst.createVariable('coord_predicted_lookup_table', 'S3', ('coord_predicted_lookup_table',))
                     dst['coord_predicted_lookup_table'][:] = coord_predicted_lookup_table
 
-                    print(dst.variables['latitude'][:])
-                    print(dst.variables['longitude'][:])
+                    #print(dst.variables['latitude'][:])
+                    #print(dst.variables['longitude'][:])
 if __name__ == '__main__':
     main()
