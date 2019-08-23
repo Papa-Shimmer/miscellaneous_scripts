@@ -101,6 +101,7 @@ def test_new_line_index(nc_input_dataset, nc_output_dataset):
     line_index = np.arange(len(index_count))
     lines_last_index = np.arange(len(index_count))
     count_sum = 0
+    count_sum = 0
     for i in np.arange(len(index_count)):
         line_index[i] = count_sum
         count_sum = count_sum + counts[i]
