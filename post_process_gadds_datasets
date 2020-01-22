@@ -1,0 +1,85 @@
+import netCDF4
+import os
+from collections import Counter
+import sys
+import numpy as np
+import logging
+import numpy.testing
+import re
+import rename_variable
+
+
+
+logging.basicConfig(level=logging.DEBUG)
+
+#np.set_printoptions(threshold=np.nan)
+
+crs_gda94_string = '''GEOGCS["GDA94", DATUM["Geocentric_Datum_of_Australia_1994", 
+SPHEROID["GRS 1980",6378137,298.257222101, AUTHORITY["EPSG","7019"]], 
+TOWGS84[0,0,0,0,0,0,0], AUTHORITY["EPSG","6283"]], PRIMEM["Greenwich",0, AUTHORITY["EPSG","8901"]], 
+UNIT["degree",0.0174532925199433, AUTHORITY["EPSG","9122"]], AUTHORITY["EPSG","4283"]]'''
+
+# vars_to_change_standard_name_to_long_name = ['bearing', 'line', 'flag_linetype', 'longitude_first', 'flight',
+#                                              'latitude_last','point', 'mag_awags', 'bounding_polygon', 'height',
+#                                              'longitude_last', 'mag_mlev', 'survey', 'fiducial', 'date', 'line',
+#                                              'mag_lev', 'latitude_first', 'rad_air_dose_rate',
+#                                              'rad_air_dose_rate_unsmoothed']
+vars_to_change_standard_name_to_long_name = ['longitude']
+#var_to_have_long_name = ['longitude', 'latitude']
+var_to_have_long_name = ['longitude']
+
+possible_survey_vars_in_order_of_preference = ['survey', 'SURVEY', 'project', 'Proj']
+# there can be more than one survey per dataset. Therefore it needs to be a variable of line dimension, and
+# the globals vars as a comma separated list.
+
+
+remove_unit_list = ['line', 'date', 'flight', 'flag_levelling', 'flag_linetype', 'fiducial']
+
+vars_to_exclude = ['point', 'index_line', 'index_count', 'survey']
+
+long_name_variations = ["longitude", "longitude_GDA94", "Longitude_gda94", "longitude_gda94_decimal_degrees", "LONGITUDE_agd66", "LONG_WGS84", "gda_long", "long84", "LONG_WGS84",
+                        "gda94geodetic_long", "longitude_agd66", "wgs84geodetic_long", "long_agd66", "longitude_wgs84", "long_gda94", "longitude_agd66", "LONGITUDE",
+                        "longitude_GDA94", "Long", "longitude_gda94", "gda94lng", "DTM_long"]
+
+lat_name_variations = ["latitude", "latitude_GDA94", "wgs84geodetic_lat", "latitude_agd66", "latitude_gda94_decimal_degrees", "Latitude_gda94", "Latitude", "LATITUDE_agd66",
+                       "LAT_WGS84", "Lat", "latitude_gda94", "LATITUDE", "latitude_agd66", "lat_gda94", "latitude_wgs84", "lat_agd66", "gda94geodetic_lat", "LAT_WGS84",
+                       "lat84", "gda_lat", "gda94lat", "DTM_lat"]  # what is DTM
+# there is lat as double or float. Same as long
+
+def conform_list_of_possible_variables(nc_dataset, old_name_list, new_name):
+
+    num_of_long_vars = 0
+    for name, variable in nc_dataset.variables.items():
+        if name!= new_name:
+
+            for longitude_name in old_name_list:
+                if name == longitude_name:
+                    num_of_long_vars += 1
+                    print("Found match: {}".format(longitude_name))
+
+                    nc_dataset.renameVariable(name, new_name)
+                    print('%s.variables["%s"] renamed to %s' % (nc_dataset, variable, new_name))
+        else:
+            print("name already correct")
+            num_of_long_vars += 1
+    if num_of_long_vars > 1:
+        print("this dataset has more than one {} variable".format(new_name))
+        print(nc_dataset)
+
+
+
+def main():
+    directory = "C://Users/u62231/Desktop/Projects/gadds/Test files for post processing/Renaminglongs"
+#    netcdf_input_path = sys.argv[1]
+   # nc_output_dataset_path = sys.argv[2]
+
+    # for netcdf in folder
+    for filename in os.listdir(directory):
+        netcdf_file = os.path.join(directory, filename)
+        nc_dataset = netCDF4.Dataset(netcdf_file, 'r+')
+        conform_list_of_possible_variables(nc_dataset, long_name_variations, "longitude")
+        conform_list_of_possible_variables(nc_dataset, lat_name_variations, "latitude")
+        nc_dataset.close()
+
+if __name__ == "__main__":
+    main()
